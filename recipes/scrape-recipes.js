@@ -1,5 +1,5 @@
 const puppeteer = require('puppeteer');
-let tools = require('../delay');
+let tools = require('../helper/delay');
 
 (async () => {
     const browser = await puppeteer.launch({ headless: true });
