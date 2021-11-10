@@ -1,7 +1,6 @@
 const puppeteer = require('puppeteer');
-let tools = require('../helper/delay');
+let tools = require('../helper/methods');
 const fs = require('fs');
-const delay = require('../helper/delay');
 
 
 (async () => {
@@ -93,10 +92,12 @@ const delay = require('../helper/delay');
 
             // Push the image url to the icons array.
             iconsArr.push(materialImage);
+            await tools.downloadIcon(browser, materialImage, '/scrape-ffxiv-recipes/material-icons/', materialName.replace(/\s+/g, '-').toLowerCase())
+
             // Push the sql formatted material infor to the array.
             infoArr.push(materialName + ", " + await createImagePath(materialName) + ", " + materialType);
 
-            // await tools.delay(250);
+            await tools.delay(250);
 
         }
     }
