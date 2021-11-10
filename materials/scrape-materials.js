@@ -5,7 +5,7 @@ const delay = require('../helper/delay');
 
 
 (async () => {
-    const browser = await puppeteer.launch({ headless: false });
+    const browser = await puppeteer.launch({ headless: true });
     const page = await browser.newPage();
     await page.setViewport({
         width: 1200,
@@ -28,14 +28,16 @@ const delay = require('../helper/delay');
     // Array to hold the material icon path string.
     const materialsIconArr = [];
 
-    // Loop through the number of pages, gathering all information from the 50 rows per page.
+    // Scrape the rows on the first page, then start the loop since we need a page.goto before starting the loop.
+    await scrapeRows(materialsInfoArr, materialsIconArr);
+
+    // Loop through the number of pages, gathering all information from each row.
     // Start at page 2 since we are loading into page 1. So k = 2.
     for (let k = 2; k <= totalNumOfPages; k++) {
-
-        await scrapeRowsOneToFifty(materialsInfoArr, materialsIconArr);
         await page.goto(`https://na.finalfantasyxiv.com/lodestone/playguide/db/item/?category2=6&page=${k}`, {
             waitUntil: 'domcontentloaded'
         });
+        await scrapeRows(materialsInfoArr, materialsIconArr);
 
     }
 
@@ -51,11 +53,26 @@ const delay = require('../helper/delay');
     // **************************************************** FUNCTIONS *****************************************************************
 
 
-    // Function that will go through the 50 rows per page, gather all the material information we need and store them into arrays.
-    async function scrapeRowsOneToFifty(infoArr, iconsArr) {
+    // Function that will go through the 50 rows per page(at max), gather all the material information we need and store them into arrays.
+    async function scrapeRows(infoArr, iconsArr) {
 
-        // 50 Recipes per page, loop from row 1 to row 50.
-        for (let i = 1; i <= 50; i++) {
+
+        // Recipe Rows Starting query selector
+        const recipeStartRowsQS = '#eorzea_db > div.clearfix > div.db_cnts > div.db-filter__row > div.pager > div > div > span.show_start';
+        const waitForStart = await page.waitForSelector(recipeStartRowsQS);
+        const rowStartNum = await waitForStart.evaluate(start => start.innerText);
+
+        // Recipe Rows End query selector
+        const recipeEndRowsQS = '#eorzea_db > div.clearfix > div.db_cnts > div.db-filter__row > div.pager > div > div > span.show_end';
+        const waitForEnd = await page.waitForSelector(recipeEndRowsQS);
+        const rowEndNum = await waitForEnd.evaluate(end => end.innerText);
+
+        // Variable that will tell us how many rows are on that page so we will know how many iterations we need for our loop.
+        let numOfRows = (parseInt(rowEndNum) - parseInt(rowStartNum)) + 1;
+
+
+        // Iterate through the number of rows on that page collecting data.
+        for (let i = 1; i <= numOfRows; i++) {
 
             // Material Type query selector
             const materialTypeQS = `#character > tbody > tr:nth-child(${i}) > td.db-table__body--light.latest_patch__major__item > div.db-table__link_txt > span > a`;
@@ -79,7 +96,7 @@ const delay = require('../helper/delay');
             // Push the sql formatted material infor to the array.
             infoArr.push(materialName + ", " + await createImagePath(materialName) + ", " + materialType);
 
-            await tools.delay(500);
+            // await tools.delay(250);
 
         }
     }
