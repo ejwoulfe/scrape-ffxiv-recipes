@@ -1,10 +1,5 @@
 const fs = require('fs');
 module.exports = {
-    delay: function (time) {
-        return new Promise(function (resolve) {
-            setTimeout(resolve, time)
-        })
-    },
     downloadIcon: async function (browser, url, folderName, name) {
         const page2 = await browser.newPage();
 

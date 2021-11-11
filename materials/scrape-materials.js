@@ -1,5 +1,7 @@
 const puppeteer = require('puppeteer');
-let tools = require('../helper/methods');
+let timer = require('../helper/delay');
+let download = require('../helper/download-icon');
+let rows = require('../helper/num-of-rows');
 const fs = require('fs');
 
 
@@ -55,23 +57,12 @@ const fs = require('fs');
     // Function that will go through the 50 rows per page(at max), gather all the material information we need and store them into arrays.
     async function scrapeRows(infoArr, iconsArr) {
 
-
-        // Recipe Rows Starting query selector
-        const recipeStartRowsQS = '#eorzea_db > div.clearfix > div.db_cnts > div.db-filter__row > div.pager > div > div > span.show_start';
-        const waitForStart = await page.waitForSelector(recipeStartRowsQS);
-        const rowStartNum = await waitForStart.evaluate(start => start.innerText);
-
-        // Recipe Rows End query selector
-        const recipeEndRowsQS = '#eorzea_db > div.clearfix > div.db_cnts > div.db-filter__row > div.pager > div > div > span.show_end';
-        const waitForEnd = await page.waitForSelector(recipeEndRowsQS);
-        const rowEndNum = await waitForEnd.evaluate(end => end.innerText);
-
-        // Variable that will tell us how many rows are on that page so we will know how many iterations we need for our loop.
-        let numOfRows = (parseInt(rowEndNum) - parseInt(rowStartNum)) + 1;
+        let totalRows = await rows.getNumOfRows(page);
 
 
         // Iterate through the number of rows on that page collecting data.
-        for (let i = 1; i <= numOfRows; i++) {
+        for (let i = 1; i <= totalRows; i++) {
+
 
             // Material Type query selector
             const materialTypeQS = `#character > tbody > tr:nth-child(${i}) > td.db-table__body--light.latest_patch__major__item > div.db-table__link_txt > span > a`;
@@ -92,12 +83,12 @@ const fs = require('fs');
 
             // Push the image url to the icons array.
             iconsArr.push(materialImage);
-            await tools.downloadIcon(browser, materialImage, '/scrape-ffxiv-recipes/material-icons/', materialName.replace(/\s+/g, '-').toLowerCase())
+            await download.downloadIcon(browser, materialImage, '/scrape-ffxiv-recipes/material-icons/', materialName.replace(/\s+/g, '-').toLowerCase());
 
             // Push the sql formatted material infor to the array.
             infoArr.push(materialName + ", " + await createImagePath(materialName) + ", " + materialType);
 
-            await tools.delay(250);
+            await timer.delay(250);
 
         }
     }

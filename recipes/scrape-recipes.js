@@ -1,5 +1,6 @@
 const puppeteer = require('puppeteer');
-let tools = require('../helper/delay');
+const fs = require('fs');
+let rows = require('../helper/num-of-rows');
 
 (async () => {
     const browser = await puppeteer.launch({ headless: true });
@@ -10,7 +11,7 @@ let tools = require('../helper/delay');
     })
 
 
-    await page.goto('https://na.finalfantasyxiv.com/lodestone/playguide/db/recipe/?category2=5&page=1', {
+    await page.goto('https://na.finalfantasyxiv.com/lodestone/playguide/db/recipe/?category2=1&page=1', {
         waitUntil: 'domcontentloaded'
     });
 
@@ -21,23 +22,49 @@ let tools = require('../helper/delay');
     // Total number of pages will be the total number of recipes divided by 50, rounded up.
     const totalNumOfPages = Math.ceil(totalRecipes / 50);
 
+    // Array to hold the material icon path string.
+    const recipesIconArr = [];
 
-    // Loop through the number of pages, gathering all information from the 50 rows per page.
-    for (let k = 2; k <= totalNumOfPages; k++) {
+    // Variable that will be collect all recipe data and format it into mysql insertion string.
+    let mysqlString = "";
 
-        await scrapeRowsOneToFifty();
-        await page.goto(`https://na.finalfantasyxiv.com/lodestone/playguide/db/recipe/?category2=5&page=${k}`, {
+    // Array that will hold all the sql formatted recipes.
+    const mySQLArray = [];
+
+
+    // Scrape the rows on the first page, then start the loop since we need a page.goto before starting the loop.
+    await scrapeRows(recipesIconArr);
+
+
+    // Loop through the number of pages, gathering all information from each row.
+    // Start at page 2 since we are loading into page 1. So k = 2.
+    for (let k = 2; k <= 3; k++) {
+
+        await page.goto(`https://na.finalfantasyxiv.com/lodestone/playguide/db/recipe/?category2=1&page=${k}`, {
             waitUntil: 'domcontentloaded'
         });
-
+        await scrapeRows(recipesIconArr);
     }
 
+    // After going through all pages and rows from the website, write to files and close the browser.
+    await writeToFile(mySQLArray);
+    await writeURLsToFile(recipesIconArr);
+
+    await browser.close();
 
 
 
-    async function scrapeRowsOneToFifty() {
-        // 50 Recipes per page, loop from row 1 to row 50.
-        for (let i = 1; i <= 50; i++) {
+
+    // **************************************************** FUNCTIONS *****************************************************************
+
+    async function scrapeRows(iconsArr) {
+
+
+        let totalRows = await rows.getNumOfRows(page);
+
+
+        // Iterate through the number of rows on that page collecting data.
+        for (let i = 1; i <= totalRows; i++) {
 
 
             let recipeLevelQS = `#character > tbody > tr:nth-child(${i}) > td:nth-child(2)`;
@@ -47,58 +74,81 @@ let tools = require('../helper/delay');
             let recipeItemLevelQS = `#character > tbody > tr:nth-child(${i}) > td:nth-child(3)`;
             const waitForItemLevel = await page.waitForSelector(recipeItemLevelQS);
             const itemLevel = await waitForItemLevel.evaluate(ilevel => ilevel.innerText);
-            console.log('Recipe Level: ' + recipeLevel + " Item Level: " + itemLevel);
+
+            await concatOnMySQLString(recipeLevel);
 
             let recipeTypeQS = `#character > tbody > tr:nth-child(${i}) > td.db-table__body--light.latest_patch__major__item > div.db-table__link_txt > span:nth-child(3)`
-            if (await page.$(recipeTypeQS) !== null) {
-                const waitForRecipeType = await page.waitForSelector(recipeTypeQS);
-                const recipeType = await waitForRecipeType.evaluate(type => type.innerText);
-                console.log(recipeType);
+
+
+            // If the item level of the recipe comes back as a -, then it will be turned into null.
+            if (itemLevel === "-") {
+
+                await concatOnMySQLString("null");
+
+            } else {
+
+                await concatOnMySQLString(itemLevel);
             }
 
 
+            // Not all recipes have a type, so if it doesn't exist then make it a type of null.
+            if (await page.$(recipeTypeQS) !== null) {
 
-            // Click on link to get recipe details.
+                const waitForRecipeType = await page.waitForSelector(recipeTypeQS);
+                const recipeType = await waitForRecipeType.evaluate(type => type.innerText);
+
+                await concatOnMySQLString(recipeType);
+            } else {
+
+                await concatOnMySQLString("null");
+            }
+
+
+            // Click on link to get recipe details, call getRecipeRequirements, then once done go back to list page.
             await page.click(`#character > tbody > tr:nth-child(${i}) div.db-table__link_txt > a`);
-            await gatherInformation();
-            await page.goBack();
-            await tools.delay(1000);
+            // Image query selector
+            let imageQS = '#eorzea_db > div.clearfix > div.db_cnts > div > div.recipe_detail.item_detail_box > div.db-view__item__header.clearfix > div.db-view__item__icon.latest_patch__major__detail__item > img.db-view__item__icon__item_image.sys_nq_element';
+            const waitForImage = await page.waitForSelector(imageQS);
+            const iconImageURL = await waitForImage.evaluate(img => img.src);
 
+
+            // Push icon url to the icons array
+            iconsArr.push(iconImageURL);
+
+            await getRecipeRequirements(mysqlString);
+            await page.goBack();
+            // await tools.delay(250);
 
         }
     }
 
 
 
-
-    async function gatherInformation() {
-        // Image query selector
-        let imageQS = '#eorzea_db > div.clearfix > div.db_cnts > div > div.recipe_detail.item_detail_box > div.db-view__item__header.clearfix > div.db-view__item__icon.latest_patch__major__detail__item > img.db-view__item__icon__item_image.sys_nq_element';
-
-
-        const waitForImage = await page.waitForSelector(imageQS);
-        const imageURL = await waitForImage.evaluate(img => img.src);
-        console.log(imageURL);
-
+    // Function that will gather the recipe icon, materials, crystals, and how many are rewarded when successfully crafted.
+    async function getRecipeRequirements() {
 
         // Recipe Name query selector
         let recipeNameQS = '#eorzea_db > div.clearfix > div.db_cnts > div > div.recipe_detail.item_detail_box > div.db-view__item__header.clearfix > div.db-view__item__text > h2';
         const waitForName = await page.waitForSelector(recipeNameQS);
         const recipeName = await waitForName.evaluate(name => name.innerText);
+        await concatOnMySQLString(await createImagePath(recipeName));
+        await concatOnMySQLString(recipeName);
 
-        console.log('Recipe Name: ' + recipeName);
 
         // Total Crafted query selector
         let totalCraftedQS = '#eorzea_db > div.clearfix > div.db_cnts > div > div.recipe_detail.item_detail_box > div.db-view__data > div.db-tree__data_header > div > p > span';
         const waitForTotal = await page.waitForSelector(totalCraftedQS);
         const totalCrafted = await waitForTotal.evaluate(total => total.innerText);
+        await concatOnMySQLString(totalCrafted);
 
-        console.log('Total Crafted: ' + totalCrafted);
 
         // Crafting materials query selector
         const materialsQS = '#eorzea_db > div.clearfix > div.db_cnts > div > div.recipe_detail.item_detail_box > div.db-view__data > div:nth-child(3) > div > div.js__material';
         const totalMaterials = (await page.$$(materialsQS)).length;
+        const maxNumOfMaterials = 6;
 
+
+        // Starting at position 2 cause the website doesn't start at 1 for some reason, so +1 to the end to compensate.
         for (let i = 2; i <= totalMaterials + 1; i++) {
 
             let materialQuantityQS = `#eorzea_db > div.clearfix > div.db_cnts > div > div.recipe_detail.item_detail_box > div.db-view__data > div:nth-child(3) > div > div:nth-child(${i}) > div > span > span`;
@@ -109,13 +159,17 @@ let tools = require('../helper/delay');
             const waitForNames = await page.waitForSelector(marterialNameQS);
             const materialName = await waitForNames.evaluate(name => name.innerText);
 
-            console.log(materialName + ', ' + quantity);
-
+            await concatOnMySQLString(materialName);
+            await concatOnMySQLString(quantity);
         }
+
+        // Once all required material fields are complete, fill the rest with nulls.
+        await concatOnMySQLString(fillRemainingFields((maxNumOfMaterials - totalMaterials)));
 
         // Crafting Crystals query selector
         const crystalsQS = '#eorzea_db > div.clearfix > div.db_cnts > div > div.recipe_detail.item_detail_box > div.db-view__data > div:nth-child(4) > div > div ';
         const totalCrystals = (await page.$$(crystalsQS)).length;
+        const maxNumOfCrystals = 2;
 
         for (let z = 2; z <= totalCrystals + 1; z++) {
             let crystalQuantitiesQS = `#eorzea_db > div.clearfix > div.db_cnts > div > div.recipe_detail.item_detail_box > div.db-view__data > div:nth-child(4) > div > div:nth-child(${z}) > div.db-view__data__reward__item__name > span`;
@@ -126,16 +180,90 @@ let tools = require('../helper/delay');
             const waitForCrystals = await page.waitForSelector(crystalNameQS);
             const crystalName = await waitForCrystals.evaluate(name => name.innerText);
 
-            console.log(crystalName + ", " + quantity)
+            await concatOnMySQLString(crystalName);
+            await concatOnMySQLString(quantity);
 
         }
 
-        console.log(page.url());
+        // Once all required crystal fields are complete, fill the rest with nulls.
+        await concatOnMySQLString(fillRemainingFields((maxNumOfCrystals - totalCrystals)));
+
+
+        // Recipe Level|Item Level|Recipe Type|Recipe Name|Total Crafted|Material1 Name|Qty|Material2 Name|Qty|Material3 Name|Qty|Material4 Name|Qty|Material5 Name|Qty|Material6 Name|Qty|Crystal1 Name|Qty|Crystal2 Name|Qty'
+        let finalString = mysqlString.slice(0, -1);
+        mySQLArray.push(finalString);
 
 
 
+        // Reset mysqlString back to an empty string;
+        mysqlString = "";
         console.log('-------------------------------');
     }
+    // Function that will create a path name for the materials icon to store into the Database.
+    function createImagePath(recipeName) {
 
-    await browser.close();
+        return "../../assets/recipe-icons/" + recipeName.replace(/\s+/g, '-').toLowerCase() + ".png";
+    }
+
+    // A single recipe can have up to six materials. If the current recipe doesn't require all 6 slots, we will fill them with nulls.
+    function fillRemainingFields(remainingNumOfFields) {
+        let fieldsArray = [];
+        for (let i = 0; i < remainingNumOfFields; i++) {
+            // The fields being filled are material/crystal name and the quantity.
+            fieldsArray.push("null");
+            fieldsArray.push("null");
+        }
+
+        return fieldsArray;
+    }
+
+    function concatOnMySQLString(field) {
+        if (Array.isArray(field)) {
+            field.map((value) => {
+                return mysqlString += value + ", ";
+            })
+        } else {
+            mysqlString += field + ", ";
+        }
+
+    }
+
+    // Function that will write the material info to a file.
+    async function writeToFile(sqlArray) {
+
+        fs.writeFile('recipes.txt', sqlArray.map((value, index) => {
+            // Use index as an ID key.
+            let recipeID = index + 1;
+            if (index === 0) {
+                return "(" + recipeID + ", " + value + ")";
+            } else {
+                return "\n" + "(" + recipeID + ", " + value + ")";
+            }
+        }),
+            (error) => {
+
+                if (error) throw err;
+
+            })
+    }
+
+    // Function that will write the material icon urls to a file.
+    async function writeURLsToFile(iconsArr) {
+
+        fs.writeFile('icon-urls.txt',
+            iconsArr.map((value, index) => {
+                if (index === 0) {
+                    return value;
+                } else {
+                    return "\n" + value;
+                }
+            }),
+            (error) => {
+
+                if (error) throw err;
+            })
+
+    }
+
+
 })();
