@@ -10,8 +10,10 @@ let rows = require('../helper/num-of-rows');
         height: 1800
     })
 
+    const URL = 'https://na.finalfantasyxiv.com/lodestone/playguide/db/recipe/?category2=2&page=';
 
-    await page.goto('https://na.finalfantasyxiv.com/lodestone/playguide/db/recipe/?category2=1&page=1', {
+
+    await page.goto(URL + '1', {
         waitUntil: 'domcontentloaded'
     });
 
@@ -31,16 +33,17 @@ let rows = require('../helper/num-of-rows');
     // Array that will hold all the sql formatted recipes.
     const mySQLArray = [];
 
-
     // Scrape the rows on the first page, then start the loop since we need a page.goto before starting the loop.
     await scrapeRows(recipesIconArr);
 
 
+
     // Loop through the number of pages, gathering all information from each row.
     // Start at page 2 since we are loading into page 1. So k = 2.
-    for (let k = 2; k <= 3; k++) {
+    for (let k = 2; k <= totalNumOfPages; k++) {
 
-        await page.goto(`https://na.finalfantasyxiv.com/lodestone/playguide/db/recipe/?category2=1&page=${k}`, {
+        console.log('-------------' + 'Page ' + k + '----------------');
+        await page.goto(URL + `${k}`, {
             waitUntil: 'domcontentloaded'
         });
         await scrapeRows(recipesIconArr);
@@ -66,6 +69,9 @@ let rows = require('../helper/num-of-rows');
         // Iterate through the number of rows on that page collecting data.
         for (let i = 1; i <= totalRows; i++) {
 
+            console.log("Current Row:  " + i);
+            console.log('------------------------------');
+
 
             let recipeLevelQS = `#character > tbody > tr:nth-child(${i}) > td:nth-child(2)`;
             const waitForRecipeLevel = await page.waitForSelector(recipeLevelQS);
@@ -77,7 +83,7 @@ let rows = require('../helper/num-of-rows');
 
             await concatOnMySQLString(recipeLevel);
 
-            let recipeTypeQS = `#character > tbody > tr:nth-child(${i}) > td.db-table__body--light.latest_patch__major__item > div.db-table__link_txt > span:nth-child(3)`
+
 
 
             // If the item level of the recipe comes back as a -, then it will be turned into null.
@@ -89,6 +95,8 @@ let rows = require('../helper/num-of-rows');
 
                 await concatOnMySQLString(itemLevel);
             }
+
+            let recipeTypeQS = `#character > tbody > tr:nth-child(${i}) > td.db-table__body--light.latest_patch__major__item > div.db-table__link_txt > span:nth-child(3)`
 
 
             // Not all recipes have a type, so if it doesn't exist then make it a type of null.
@@ -117,7 +125,6 @@ let rows = require('../helper/num-of-rows');
 
             await getRecipeRequirements(mysqlString);
             await page.goBack();
-            // await tools.delay(250);
 
         }
     }
@@ -190,14 +197,15 @@ let rows = require('../helper/num-of-rows');
 
 
         // Recipe Level|Item Level|Recipe Type|Recipe Name|Total Crafted|Material1 Name|Qty|Material2 Name|Qty|Material3 Name|Qty|Material4 Name|Qty|Material5 Name|Qty|Material6 Name|Qty|Crystal1 Name|Qty|Crystal2 Name|Qty'
-        let finalString = mysqlString.slice(0, -1);
-        mySQLArray.push(finalString);
+
+        // Trim any white spaces on the string and remove the last character which will be an extra comma.
+        let formattedSQL = mysqlString.trim().slice(0, -1);
+        mySQLArray.push(formattedSQL);
 
 
 
         // Reset mysqlString back to an empty string;
         mysqlString = "";
-        console.log('-------------------------------');
     }
     // Function that will create a path name for the materials icon to store into the Database.
     function createImagePath(recipeName) {
