@@ -1,0 +1,8 @@
+(1, 'Alchemist', '../../assets/disciples-icons/alchemist.png'),
+(2, 'Armorer', '../../assets/disciples-icons/armorer.png'),
+(3, 'Blacksmithing', '../../assets/disciples-icons/blacksmithing.png'),
+(4, 'Carpenter', '../../assets/disciples-icons/carpenter.png'),
+(5, 'Culinarian', '../../assets/disciples-icons/culinarian.png'),
+(6, 'Goldsmith', '../../assets/disciples-icons/goldsmith.png'),
+(7, 'Leatherworker', '../../assets/disciples-icons/leatherworker.png'),
+(8, 'Weaver', '../../assets/disciples-icons/weaver.png')

@@ -10,7 +10,7 @@ let rows = require('../helper/num-of-rows');
         height: 1800
     })
 
-    const URL = 'https://na.finalfantasyxiv.com/lodestone/playguide/db/recipe/?category2=2&page=';
+    const URL = 'https://na.finalfantasyxiv.com/lodestone/playguide/db/recipe/?category2=7&page=';
 
 
     await page.goto(URL + '1', {
