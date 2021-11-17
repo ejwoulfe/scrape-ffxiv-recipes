@@ -80,43 +80,43 @@ let download = require('../helper/download-icon');
             console.log('------------------------------');
 
 
-            // let recipeLevelQS = `#character > tbody > tr:nth-child(${i}) > td:nth-child(2)`;
-            // const waitForRecipeLevel = await page.waitForSelector(recipeLevelQS);
-            // const recipeLevel = await waitForRecipeLevel.evaluate(rlevel => rlevel.innerText);
+            let recipeLevelQS = `#character > tbody > tr:nth-child(${i}) > td:nth-child(2)`;
+            const waitForRecipeLevel = await page.waitForSelector(recipeLevelQS);
+            const recipeLevel = await waitForRecipeLevel.evaluate(rlevel => rlevel.innerText);
 
-            // let recipeItemLevelQS = `#character > tbody > tr:nth-child(${i}) > td:nth-child(3)`;
-            // const waitForItemLevel = await page.waitForSelector(recipeItemLevelQS);
-            // const itemLevel = await waitForItemLevel.evaluate(ilevel => ilevel.innerText);
+            let recipeItemLevelQS = `#character > tbody > tr:nth-child(${i}) > td:nth-child(3)`;
+            const waitForItemLevel = await page.waitForSelector(recipeItemLevelQS);
+            const itemLevel = await waitForItemLevel.evaluate(ilevel => ilevel.innerText);
 
-            // await concatOnMySQLString(recipeLevel);
-
-
+            await concatOnMySQLString(recipeLevel);
 
 
-            // // If the item level of the recipe comes back as a -, then it will be turned into null.
-            // if (itemLevel === "-") {
-
-            //     await concatOnMySQLString("null");
-
-            // } else {
-
-            //     await concatOnMySQLString(itemLevel);
-            // }
-
-            // let recipeTypeQS = `#character > tbody > tr:nth-child(${i}) > td.db-table__body--light.latest_patch__major__item > div.db-table__link_txt > span:nth-child(3)`
 
 
-            // // Not all recipes have a type, so if it doesn't exist then make it a type of null.
-            // if (await page.$(recipeTypeQS) !== null) {
+            // If the item level of the recipe comes back as a -, then it will be turned into null.
+            if (itemLevel === "-") {
 
-            //     const waitForRecipeType = await page.waitForSelector(recipeTypeQS);
-            //     const recipeType = await waitForRecipeType.evaluate(type => type.innerText);
+                await concatOnMySQLString("null");
 
-            //     await concatOnMySQLString(recipeType);
-            // } else {
+            } else {
 
-            //     await concatOnMySQLString("null");
-            // }
+                await concatOnMySQLString(itemLevel);
+            }
+
+            let recipeTypeQS = `#character > tbody > tr:nth-child(${i}) > td.db-table__body--light.latest_patch__major__item > div.db-table__link_txt > span:nth-child(3)`
+
+
+            // Not all recipes have a type, so if it doesn't exist then make it a type of null.
+            if (await page.$(recipeTypeQS) !== null) {
+
+                const waitForRecipeType = await page.waitForSelector(recipeTypeQS);
+                const recipeType = await waitForRecipeType.evaluate(type => type.innerText);
+
+                await concatOnMySQLString(recipeType);
+            } else {
+
+                await concatOnMySQLString("null");
+            }
 
 
             // Click on link to get recipe details, call getRecipeRequirements, then once done go back to list page.
@@ -140,7 +140,7 @@ let download = require('../helper/download-icon');
             await download.downloadIcon(browser, iconImageURL, 'scrape-ffxiv-recipes/icons/culinarian', recipeName.replace(/\s+/g, '-').toLowerCase());
 
 
-            //await getRecipeRequirements();
+            await getRecipeRequirements();
             await page.goBack();
 
         }
