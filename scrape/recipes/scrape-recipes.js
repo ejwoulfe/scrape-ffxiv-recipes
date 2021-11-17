@@ -1,6 +1,7 @@
 const puppeteer = require('puppeteer');
 const fs = require('fs');
 let rows = require('../helper/num-of-rows');
+let download = require('../helper/download-icon');
 
 (async () => {
     const browser = await puppeteer.launch({ headless: true });
@@ -33,8 +34,11 @@ let rows = require('../helper/num-of-rows');
     // Array that will hold all the sql formatted recipes.
     const mySQLArray = [];
 
+    let count = 0;
     // Scrape the rows on the first page, then start the loop since we need a page.goto before starting the loop.
     await scrapeRows(recipesIconArr);
+
+
 
 
 
@@ -69,47 +73,50 @@ let rows = require('../helper/num-of-rows');
         // Iterate through the number of rows on that page collecting data.
         for (let i = 1; i <= totalRows; i++) {
 
+            count += 1;
+            console.log(count);
+
             console.log("Current Row:  " + i);
             console.log('------------------------------');
 
 
-            let recipeLevelQS = `#character > tbody > tr:nth-child(${i}) > td:nth-child(2)`;
-            const waitForRecipeLevel = await page.waitForSelector(recipeLevelQS);
-            const recipeLevel = await waitForRecipeLevel.evaluate(rlevel => rlevel.innerText);
+            // let recipeLevelQS = `#character > tbody > tr:nth-child(${i}) > td:nth-child(2)`;
+            // const waitForRecipeLevel = await page.waitForSelector(recipeLevelQS);
+            // const recipeLevel = await waitForRecipeLevel.evaluate(rlevel => rlevel.innerText);
 
-            let recipeItemLevelQS = `#character > tbody > tr:nth-child(${i}) > td:nth-child(3)`;
-            const waitForItemLevel = await page.waitForSelector(recipeItemLevelQS);
-            const itemLevel = await waitForItemLevel.evaluate(ilevel => ilevel.innerText);
+            // let recipeItemLevelQS = `#character > tbody > tr:nth-child(${i}) > td:nth-child(3)`;
+            // const waitForItemLevel = await page.waitForSelector(recipeItemLevelQS);
+            // const itemLevel = await waitForItemLevel.evaluate(ilevel => ilevel.innerText);
 
-            await concatOnMySQLString(recipeLevel);
-
-
+            // await concatOnMySQLString(recipeLevel);
 
 
-            // If the item level of the recipe comes back as a -, then it will be turned into null.
-            if (itemLevel === "-") {
-
-                await concatOnMySQLString("null");
-
-            } else {
-
-                await concatOnMySQLString(itemLevel);
-            }
-
-            let recipeTypeQS = `#character > tbody > tr:nth-child(${i}) > td.db-table__body--light.latest_patch__major__item > div.db-table__link_txt > span:nth-child(3)`
 
 
-            // Not all recipes have a type, so if it doesn't exist then make it a type of null.
-            if (await page.$(recipeTypeQS) !== null) {
+            // // If the item level of the recipe comes back as a -, then it will be turned into null.
+            // if (itemLevel === "-") {
 
-                const waitForRecipeType = await page.waitForSelector(recipeTypeQS);
-                const recipeType = await waitForRecipeType.evaluate(type => type.innerText);
+            //     await concatOnMySQLString("null");
 
-                await concatOnMySQLString(recipeType);
-            } else {
+            // } else {
 
-                await concatOnMySQLString("null");
-            }
+            //     await concatOnMySQLString(itemLevel);
+            // }
+
+            // let recipeTypeQS = `#character > tbody > tr:nth-child(${i}) > td.db-table__body--light.latest_patch__major__item > div.db-table__link_txt > span:nth-child(3)`
+
+
+            // // Not all recipes have a type, so if it doesn't exist then make it a type of null.
+            // if (await page.$(recipeTypeQS) !== null) {
+
+            //     const waitForRecipeType = await page.waitForSelector(recipeTypeQS);
+            //     const recipeType = await waitForRecipeType.evaluate(type => type.innerText);
+
+            //     await concatOnMySQLString(recipeType);
+            // } else {
+
+            //     await concatOnMySQLString("null");
+            // }
 
 
             // Click on link to get recipe details, call getRecipeRequirements, then once done go back to list page.
@@ -123,7 +130,17 @@ let rows = require('../helper/num-of-rows');
             // Push icon url to the icons array
             iconsArr.push(iconImageURL);
 
-            await getRecipeRequirements(mysqlString);
+            // Recipe Name query selector
+            let recipeNameQS = '#eorzea_db > div.clearfix > div.db_cnts > div > div.recipe_detail.item_detail_box > div.db-view__item__header.clearfix > div.db-view__item__text > h2';
+            const waitForName = await page.waitForSelector(recipeNameQS);
+            const recipeName = await waitForName.evaluate(name => name.innerText);
+            await concatOnMySQLString(await createImagePath(recipeName));
+            await concatOnMySQLString(recipeName);
+
+            await download.downloadIcon(browser, iconImageURL, 'scrape-ffxiv-recipes/icons/culinarian', recipeName.replace(/\s+/g, '-').toLowerCase());
+
+
+            //await getRecipeRequirements();
             await page.goBack();
 
         }
