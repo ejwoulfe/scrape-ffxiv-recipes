@@ -6,6 +6,9 @@
 /.pnp
 .pnp.js
 
+# database info
+/database
+
 # testing
 /coverage
 

@@ -2,6 +2,14 @@ const puppeteer = require('puppeteer');
 const fs = require('fs');
 let rows = require('../helper/num-of-rows');
 let download = require('../helper/download-icon');
+let db = require('../../database/connect-to-database');
+
+
+// Connect to the database.
+db.connect(function (err) {
+    if (err) throw err;
+    console.log("Connected!");
+});
 
 (async () => {
     const browser = await puppeteer.launch({ headless: true });
@@ -34,7 +42,18 @@ let download = require('../helper/download-icon');
     // Array that will hold all the sql formatted recipes.
     const mySQLArray = [];
 
-    let count = 0;
+    let mySQLObject = {
+        id: null,
+        level: null,
+        itemLevel: null,
+        type: null,
+        icon: null,
+        name: null,
+        totalCrafted: null,
+        link: null
+    };
+
+    let recipeID = 0;
     // Scrape the rows on the first page, then start the loop since we need a page.goto before starting the loop.
     await scrapeRows(recipesIconArr);
 
@@ -64,7 +83,7 @@ let download = require('../helper/download-icon');
 
     // **************************************************** FUNCTIONS *****************************************************************
 
-    async function scrapeRows(iconsArr) {
+    async function scrapeRows() {
 
 
         let totalRows = await rows.getNumOfRows(page);
@@ -73,10 +92,11 @@ let download = require('../helper/download-icon');
         // Iterate through the number of rows on that page collecting data.
         for (let i = 1; i <= totalRows; i++) {
 
-            count += 1;
-            console.log(count);
+            recipeID += 1;
 
-            console.log("Current Row:  " + i);
+            mySQLObject.id = recipeID;
+            console.log('------------------------------');
+            console.log("Current Row:  " + recipeID);
             console.log('------------------------------');
 
 
@@ -88,20 +108,9 @@ let download = require('../helper/download-icon');
             const waitForItemLevel = await page.waitForSelector(recipeItemLevelQS);
             const itemLevel = await waitForItemLevel.evaluate(ilevel => ilevel.innerText);
 
-            await concatOnMySQLString(recipeLevel);
+            mySQLObject.level = recipeLevel;
+            mySQLObject.itemLevel = itemLevel;
 
-
-
-
-            // If the item level of the recipe comes back as a -, then it will be turned into null.
-            if (itemLevel === "-") {
-
-                await concatOnMySQLString("null");
-
-            } else {
-
-                await concatOnMySQLString(itemLevel);
-            }
 
             let recipeTypeQS = `#character > tbody > tr:nth-child(${i}) > td.db-table__body--light.latest_patch__major__item > div.db-table__link_txt > span:nth-child(3)`
 
@@ -111,13 +120,13 @@ let download = require('../helper/download-icon');
 
                 const waitForRecipeType = await page.waitForSelector(recipeTypeQS);
                 const recipeType = await waitForRecipeType.evaluate(type => type.innerText);
+                mySQLObject.recipeType = recipeType;
 
-                await concatOnMySQLString(recipeType);
-            } else {
-
-                await concatOnMySQLString("null");
             }
 
+
+
+            ///////////// Click to recipe details page  /////////////
 
             // Click on link to get recipe details, call getRecipeRequirements, then once done go back to list page.
             await page.click(`#character > tbody > tr:nth-child(${i}) div.db-table__link_txt > a`);
@@ -126,50 +135,63 @@ let download = require('../helper/download-icon');
             const waitForImage = await page.waitForSelector(imageQS);
             const iconImageURL = await waitForImage.evaluate(img => img.src);
 
+            mySQLObject.link = page.url();
+
+
+
 
             // Push icon url to the icons array
-            iconsArr.push(iconImageURL);
+            // iconsArr.push(iconImageURL);
 
             // Recipe Name query selector
             let recipeNameQS = '#eorzea_db > div.clearfix > div.db_cnts > div > div.recipe_detail.item_detail_box > div.db-view__item__header.clearfix > div.db-view__item__text > h2';
             const waitForName = await page.waitForSelector(recipeNameQS);
             const recipeName = await waitForName.evaluate(name => name.innerText);
-            await concatOnMySQLString(await createImagePath(recipeName));
-            await concatOnMySQLString(recipeName);
-
-            await download.downloadIcon(browser, iconImageURL, 'scrape-ffxiv-recipes/icons/culinarian', recipeName.replace(/\s+/g, '-').toLowerCase());
 
 
-            await getRecipeRequirements();
+            mySQLObject.icon = createImagePath(recipeName);
+
+            mySQLObject.name = recipeName;
+
+
+
+            // Total Crafted query selector
+            let totalCraftedQS = '#eorzea_db > div.clearfix > div.db_cnts > div > div.recipe_detail.item_detail_box > div.db-view__data > div.db-tree__data_header > div > p > span';
+            const waitForTotal = await page.waitForSelector(totalCraftedQS);
+            const totalCrafted = await waitForTotal.evaluate(total => total.innerText);
+            mySQLObject.totalCrafted = totalCrafted;
+
+
+            // await download.downloadIcon(browser, iconImageURL, 'scrape-ffxiv-recipes/icons/culinarian', recipeName.replace(/\s+/g, '-').toLowerCase());
+            console.log(recipeName);
+            // Gather the recipe required materials
+            await getRecipeMaterials();
+            // Gather the recipe required crystals
+            await getRecipeCrystals();
+
+            // console.log(formattedSQL);
+            //console.log(mySQLObject)
+
+
+
+
+
+            // Once done gathering all the necessary data, go back to the list page.
             await page.goBack();
 
         }
+
+
     }
 
 
 
-    // Function that will gather the recipe icon, materials, crystals, and how many are rewarded when successfully crafted.
-    async function getRecipeRequirements() {
-
-        // Recipe Name query selector
-        let recipeNameQS = '#eorzea_db > div.clearfix > div.db_cnts > div > div.recipe_detail.item_detail_box > div.db-view__item__header.clearfix > div.db-view__item__text > h2';
-        const waitForName = await page.waitForSelector(recipeNameQS);
-        const recipeName = await waitForName.evaluate(name => name.innerText);
-        await concatOnMySQLString(await createImagePath(recipeName));
-        await concatOnMySQLString(recipeName);
-
-
-        // Total Crafted query selector
-        let totalCraftedQS = '#eorzea_db > div.clearfix > div.db_cnts > div > div.recipe_detail.item_detail_box > div.db-view__data > div.db-tree__data_header > div > p > span';
-        const waitForTotal = await page.waitForSelector(totalCraftedQS);
-        const totalCrafted = await waitForTotal.evaluate(total => total.innerText);
-        await concatOnMySQLString(totalCrafted);
-
+    // Function that will gather the materials required to craft the recipe.
+    async function getRecipeMaterials() {
 
         // Crafting materials query selector
         const materialsQS = '#eorzea_db > div.clearfix > div.db_cnts > div > div.recipe_detail.item_detail_box > div.db-view__data > div:nth-child(3) > div > div.js__material';
         const totalMaterials = (await page.$$(materialsQS)).length;
-        const maxNumOfMaterials = 6;
 
 
         // Starting at position 2 cause the website doesn't start at 1 for some reason, so +1 to the end to compensate.
@@ -183,19 +205,34 @@ let download = require('../helper/download-icon');
             const waitForNames = await page.waitForSelector(marterialNameQS);
             const materialName = await waitForNames.evaluate(name => name.innerText);
 
-            await concatOnMySQLString(materialName);
-            await concatOnMySQLString(quantity);
+            // Get the materials id from the materials table using the material name.
+            db.query(`SELECT material_id FROM materials WHERE name = '${materialName}'`, function (err, result) {
+                if (err) throw err;
+
+                let materialID = JSON.stringify(result[0].material_id);
+
+                console.log("rID  mID  qty")
+                console.log(recipeID + ", " + materialID + ", " + quantity)
+            });
+
+            // Insert the recipe id, material id, and material quantity into the materials list table.
+
+
         }
 
-        // Once all required material fields are complete, fill the rest with nulls.
-        await concatOnMySQLString(fillRemainingFields((maxNumOfMaterials - totalMaterials)));
+
+
+    }
+
+    // Function that will gather the crystals required to craft the recipe.
+    async function getRecipeCrystals() {
 
         // Crafting Crystals query selector
         const crystalsQS = '#eorzea_db > div.clearfix > div.db_cnts > div > div.recipe_detail.item_detail_box > div.db-view__data > div:nth-child(4) > div > div ';
         const totalCrystals = (await page.$$(crystalsQS)).length;
-        const maxNumOfCrystals = 2;
 
         for (let z = 2; z <= totalCrystals + 1; z++) {
+
             let crystalQuantitiesQS = `#eorzea_db > div.clearfix > div.db_cnts > div > div.recipe_detail.item_detail_box > div.db-view__data > div:nth-child(4) > div > div:nth-child(${z}) > div.db-view__data__reward__item__name > span`;
             const waitForQuantities = await page.waitForSelector(crystalQuantitiesQS);
             const quantity = await waitForQuantities.evaluate(qty => qty.innerText);
@@ -204,54 +241,30 @@ let download = require('../helper/download-icon');
             const waitForCrystals = await page.waitForSelector(crystalNameQS);
             const crystalName = await waitForCrystals.evaluate(name => name.innerText);
 
-            await concatOnMySQLString(crystalName);
-            await concatOnMySQLString(quantity);
+
+            db.query(`SELECT crystal_id FROM crystals WHERE name = '${crystalName}'`, function (err, result) {
+                if (err) throw err;
+
+                let crystalID = JSON.stringify(result[0].crystal_id);
+
+                console.log("rID  cID  qty")
+                console.log(recipeID + ", " + crystalID + ", " + quantity)
+            });
 
         }
 
-        // Once all required crystal fields are complete, fill the rest with nulls.
-        await concatOnMySQLString(fillRemainingFields((maxNumOfCrystals - totalCrystals)));
 
-
-        // Recipe Level|Item Level|Recipe Type|Recipe Name|Total Crafted|Material1 Name|Qty|Material2 Name|Qty|Material3 Name|Qty|Material4 Name|Qty|Material5 Name|Qty|Material6 Name|Qty|Crystal1 Name|Qty|Crystal2 Name|Qty'
-
-        // Trim any white spaces on the string and remove the last character which will be an extra comma.
-        let formattedSQL = mysqlString.trim().slice(0, -1);
-        mySQLArray.push(formattedSQL);
-
-
-
-        // Reset mysqlString back to an empty string;
-        mysqlString = "";
     }
+
+
+
     // Function that will create a path name for the materials icon to store into the Database.
     function createImagePath(recipeName) {
 
         return "../../assets/recipe-icons/" + recipeName.replace(/\s+/g, '-').toLowerCase() + ".png";
     }
 
-    // A single recipe can have up to six materials. If the current recipe doesn't require all 6 slots, we will fill them with nulls.
-    function fillRemainingFields(remainingNumOfFields) {
-        let fieldsArray = [];
-        for (let i = 0; i < remainingNumOfFields; i++) {
-            // The fields being filled are material/crystal name and the quantity.
-            fieldsArray.push("null");
-            fieldsArray.push("null");
-        }
 
-        return fieldsArray;
-    }
-
-    function concatOnMySQLString(field) {
-        if (Array.isArray(field)) {
-            field.map((value) => {
-                return mysqlString += value + ", ";
-            })
-        } else {
-            mysqlString += field + ", ";
-        }
-
-    }
 
     // Function that will write the material info to a file.
     async function writeToFile(sqlArray) {
