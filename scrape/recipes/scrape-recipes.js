@@ -19,7 +19,7 @@ db.connect(function (err) {
         height: 1800
     })
 
-    const URL = 'https://na.finalfantasyxiv.com/lodestone/playguide/db/recipe/?category2=7&page=';
+    const URL = 'https://na.finalfantasyxiv.com/lodestone/playguide/db/recipe/?category2=5&page=';
 
 
     await page.goto(URL + '1', {
