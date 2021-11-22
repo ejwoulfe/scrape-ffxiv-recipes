@@ -20,9 +20,10 @@ db.connect(function (err) {
     })
 
     const URL = 'https://na.finalfantasyxiv.com/lodestone/playguide/db/recipe/?category2=5&page=';
+    let startingPage = 24;
 
 
-    await page.goto(URL + '1', {
+    await page.goto(URL + `${startingPage}`, {
         waitUntil: 'domcontentloaded'
     });
 
@@ -63,7 +64,7 @@ db.connect(function (err) {
 
     // Loop through the number of pages, gathering all information from each row.
     // Start at page 2 since we are loading into page 1. So k = 2.
-    for (let k = 2; k <= totalNumOfPages; k++) {
+    for (let k = startingPage + 1; k <= totalNumOfPages; k++) {
 
         console.log('-------------' + 'Page ' + k + '----------------');
         await page.goto(URL + `${k}`, {
@@ -92,92 +93,99 @@ db.connect(function (err) {
         // Iterate through the number of rows on that page collecting data.
         for (let i = 1; i <= totalRows; i++) {
 
-            recipeID += 1;
 
-            mySQLObject.id = recipeID;
-            console.log('------------------------------');
-            console.log("Current Row:  " + recipeID);
-            console.log('------------------------------');
+            try {
 
 
-            let recipeLevelQS = `#character > tbody > tr:nth-child(${i}) > td:nth-child(2)`;
-            const waitForRecipeLevel = await page.waitForSelector(recipeLevelQS);
-            const recipeLevel = await waitForRecipeLevel.evaluate(rlevel => rlevel.innerText);
+                recipeID += 1;
 
-            let recipeItemLevelQS = `#character > tbody > tr:nth-child(${i}) > td:nth-child(3)`;
-            const waitForItemLevel = await page.waitForSelector(recipeItemLevelQS);
-            const itemLevel = await waitForItemLevel.evaluate(ilevel => ilevel.innerText);
-
-            mySQLObject.level = recipeLevel;
-            mySQLObject.itemLevel = itemLevel;
+                mySQLObject.id = recipeID;
+                console.log('------------------------------');
+                console.log("Current Row:  " + recipeID);
+                console.log('------------------------------');
 
 
-            let recipeTypeQS = `#character > tbody > tr:nth-child(${i}) > td.db-table__body--light.latest_patch__major__item > div.db-table__link_txt > span:nth-child(3)`
+                let recipeLevelQS = `#character > tbody > tr:nth-child(${i}) > td:nth-child(2)`;
+                const waitForRecipeLevel = await page.waitForSelector(recipeLevelQS);
+                const recipeLevel = await waitForRecipeLevel.evaluate(rlevel => rlevel.innerText);
+
+                let recipeItemLevelQS = `#character > tbody > tr:nth-child(${i}) > td:nth-child(3)`;
+                const waitForItemLevel = await page.waitForSelector(recipeItemLevelQS);
+                const itemLevel = await waitForItemLevel.evaluate(ilevel => ilevel.innerText);
+
+                mySQLObject.level = recipeLevel;
+                mySQLObject.itemLevel = itemLevel;
 
 
-            // Not all recipes have a type, so if it doesn't exist then make it a type of null.
-            if (await page.$(recipeTypeQS) !== null) {
+                let recipeTypeQS = `#character > tbody > tr:nth-child(${i}) > td.db-table__body--light.latest_patch__major__item > div.db-table__link_txt > span:nth-child(3)`
 
-                const waitForRecipeType = await page.waitForSelector(recipeTypeQS);
-                const recipeType = await waitForRecipeType.evaluate(type => type.innerText);
-                mySQLObject.recipeType = recipeType;
 
+                // Not all recipes have a type, so if it doesn't exist then make it a type of null.
+                if (await page.$(recipeTypeQS) !== null) {
+
+                    const waitForRecipeType = await page.waitForSelector(recipeTypeQS);
+                    const recipeType = await waitForRecipeType.evaluate(type => type.innerText);
+                    mySQLObject.recipeType = recipeType;
+
+                }
+
+
+
+                ///////////// Click to recipe details page  /////////////
+
+                // Click on link to get recipe details, call getRecipeRequirements, then once done go back to list page.
+                await page.click(`#character > tbody > tr:nth-child(${i}) div.db-table__link_txt > a`);
+                // Image query selector
+                let imageQS = '#eorzea_db > div.clearfix > div.db_cnts > div > div.recipe_detail.item_detail_box > div.db-view__item__header.clearfix > div.db-view__item__icon.latest_patch__major__detail__item > img.db-view__item__icon__item_image.sys_nq_element';
+                const waitForImage = await page.waitForSelector(imageQS);
+                const iconImageURL = await waitForImage.evaluate(img => img.src);
+
+                mySQLObject.link = page.url();
+
+
+
+
+                // Push icon url to the icons array
+                // iconsArr.push(iconImageURL);
+
+                // Recipe Name query selector
+                let recipeNameQS = '#eorzea_db > div.clearfix > div.db_cnts > div > div.recipe_detail.item_detail_box > div.db-view__item__header.clearfix > div.db-view__item__text > h2';
+                const waitForName = await page.waitForSelector(recipeNameQS);
+                const recipeName = await waitForName.evaluate(name => name.innerText);
+
+
+                mySQLObject.icon = createImagePath(recipeName);
+
+                mySQLObject.name = recipeName;
+
+
+
+                // Total Crafted query selector
+                let totalCraftedQS = '#eorzea_db > div.clearfix > div.db_cnts > div > div.recipe_detail.item_detail_box > div.db-view__data > div.db-tree__data_header > div > p > span';
+                const waitForTotal = await page.waitForSelector(totalCraftedQS);
+                const totalCrafted = await waitForTotal.evaluate(total => total.innerText);
+                mySQLObject.totalCrafted = totalCrafted;
+
+
+                // await download.downloadIcon(browser, iconImageURL, 'scrape-ffxiv-recipes/icons/culinarian', recipeName.replace(/\s+/g, '-').toLowerCase());
+                console.log(recipeName);
+                // Gather the recipe required materials
+                await getRecipeMaterials();
+                // Gather the recipe required crystals
+                await getRecipeCrystals();
+
+                // console.log(formattedSQL);
+                //console.log(mySQLObject)
+
+
+
+
+
+                // Once done gathering all the necessary data, go back to the list page.
+                await page.goBack();
+            } catch (error) {
+                console.log("Error in iteration: " + i)
             }
-
-
-
-            ///////////// Click to recipe details page  /////////////
-
-            // Click on link to get recipe details, call getRecipeRequirements, then once done go back to list page.
-            await page.click(`#character > tbody > tr:nth-child(${i}) div.db-table__link_txt > a`);
-            // Image query selector
-            let imageQS = '#eorzea_db > div.clearfix > div.db_cnts > div > div.recipe_detail.item_detail_box > div.db-view__item__header.clearfix > div.db-view__item__icon.latest_patch__major__detail__item > img.db-view__item__icon__item_image.sys_nq_element';
-            const waitForImage = await page.waitForSelector(imageQS);
-            const iconImageURL = await waitForImage.evaluate(img => img.src);
-
-            mySQLObject.link = page.url();
-
-
-
-
-            // Push icon url to the icons array
-            // iconsArr.push(iconImageURL);
-
-            // Recipe Name query selector
-            let recipeNameQS = '#eorzea_db > div.clearfix > div.db_cnts > div > div.recipe_detail.item_detail_box > div.db-view__item__header.clearfix > div.db-view__item__text > h2';
-            const waitForName = await page.waitForSelector(recipeNameQS);
-            const recipeName = await waitForName.evaluate(name => name.innerText);
-
-
-            mySQLObject.icon = createImagePath(recipeName);
-
-            mySQLObject.name = recipeName;
-
-
-
-            // Total Crafted query selector
-            let totalCraftedQS = '#eorzea_db > div.clearfix > div.db_cnts > div > div.recipe_detail.item_detail_box > div.db-view__data > div.db-tree__data_header > div > p > span';
-            const waitForTotal = await page.waitForSelector(totalCraftedQS);
-            const totalCrafted = await waitForTotal.evaluate(total => total.innerText);
-            mySQLObject.totalCrafted = totalCrafted;
-
-
-            // await download.downloadIcon(browser, iconImageURL, 'scrape-ffxiv-recipes/icons/culinarian', recipeName.replace(/\s+/g, '-').toLowerCase());
-            console.log(recipeName);
-            // Gather the recipe required materials
-            await getRecipeMaterials();
-            // Gather the recipe required crystals
-            await getRecipeCrystals();
-
-            // console.log(formattedSQL);
-            //console.log(mySQLObject)
-
-
-
-
-
-            // Once done gathering all the necessary data, go back to the list page.
-            await page.goBack();
 
         }
 
@@ -197,23 +205,32 @@ db.connect(function (err) {
         // Starting at position 2 cause the website doesn't start at 1 for some reason, so +1 to the end to compensate.
         for (let i = 2; i <= totalMaterials + 1; i++) {
 
-            let materialQuantityQS = `#eorzea_db > div.clearfix > div.db_cnts > div > div.recipe_detail.item_detail_box > div.db-view__data > div:nth-child(3) > div > div:nth-child(${i}) > div > span > span`;
-            const waitForQuantities = await page.waitForSelector(materialQuantityQS);
-            const quantity = await waitForQuantities.evaluate(qty => qty.innerText);
+            try {
 
-            let marterialNameQS = `#eorzea_db > div.clearfix > div.db_cnts > div > div.recipe_detail.item_detail_box > div.db-view__data > div:nth-child(3) > div > div:nth-child(${i}) > div.db-view__data__reward__item__name.js__trigger_icons > div > a`;
-            const waitForNames = await page.waitForSelector(marterialNameQS);
-            const materialName = await waitForNames.evaluate(name => name.innerText);
 
-            // Get the materials id from the materials table using the material name.
-            db.query(`SELECT material_id FROM materials WHERE name = '${materialName}'`, function (err, result) {
-                if (err) throw err;
 
-                let materialID = JSON.stringify(result[0].material_id);
+                let materialQuantityQS = `#eorzea_db > div.clearfix > div.db_cnts > div > div.recipe_detail.item_detail_box > div.db-view__data > div:nth-child(3) > div > div:nth-child(${i}) > div > span > span`;
+                const waitForQuantities = await page.waitForSelector(materialQuantityQS);
+                const quantity = await waitForQuantities.evaluate(qty => qty.innerText);
 
-                console.log("rID  mID  qty")
-                console.log(recipeID + ", " + materialID + ", " + quantity)
-            });
+                let marterialNameQS = `#eorzea_db > div.clearfix > div.db_cnts > div > div.recipe_detail.item_detail_box > div.db-view__data > div:nth-child(3) > div > div:nth-child(${i}) > div.db-view__data__reward__item__name.js__trigger_icons > div > a`;
+                const waitForNames = await page.waitForSelector(marterialNameQS);
+                const materialName = await waitForNames.evaluate(name => name.innerText);
+
+                let formattedMaterialName = materialName.replace("'", "\\'");
+
+                // Get the materials id from the materials table using the material name.
+                db.query(`SELECT material_id FROM materials WHERE name = '${formattedMaterialName}'`, function (err, result) {
+
+
+                    let materialID = JSON.stringify(result[0].material_id);
+
+                    console.log("rID  mID  qty")
+                    console.log(recipeID + ", " + materialID + ", " + quantity)
+                });
+            } catch (error) {
+                console.log("Error in iteration: " + i)
+            }
 
             // Insert the recipe id, material id, and material quantity into the materials list table.
 
@@ -233,25 +250,31 @@ db.connect(function (err) {
 
         for (let z = 2; z <= totalCrystals + 1; z++) {
 
-            let crystalQuantitiesQS = `#eorzea_db > div.clearfix > div.db_cnts > div > div.recipe_detail.item_detail_box > div.db-view__data > div:nth-child(4) > div > div:nth-child(${z}) > div.db-view__data__reward__item__name > span`;
-            const waitForQuantities = await page.waitForSelector(crystalQuantitiesQS);
-            const quantity = await waitForQuantities.evaluate(qty => qty.innerText);
+            try {
 
-            let crystalNameQS = `#eorzea_db > div.clearfix > div.db_cnts > div > div.recipe_detail.item_detail_box > div.db-view__data > div:nth-child(4) > div > div:nth-child(${z}) > div.db-view__data__reward__item__name > div > a > strong`;
-            const waitForCrystals = await page.waitForSelector(crystalNameQS);
-            const crystalName = await waitForCrystals.evaluate(name => name.innerText);
+                let crystalQuantitiesQS = `#eorzea_db > div.clearfix > div.db_cnts > div > div.recipe_detail.item_detail_box > div.db-view__data > div:nth-child(4) > div > div:nth-child(${z}) > div.db-view__data__reward__item__name > span`;
+                const waitForQuantities = await page.waitForSelector(crystalQuantitiesQS);
+                const quantity = await waitForQuantities.evaluate(qty => qty.innerText);
+
+                let crystalNameQS = `#eorzea_db > div.clearfix > div.db_cnts > div > div.recipe_detail.item_detail_box > div.db-view__data > div:nth-child(4) > div > div:nth-child(${z}) > div.db-view__data__reward__item__name > div > a > strong`;
+                const waitForCrystals = await page.waitForSelector(crystalNameQS);
+                const crystalName = await waitForCrystals.evaluate(name => name.innerText);
 
 
-            db.query(`SELECT crystal_id FROM crystals WHERE name = '${crystalName}'`, function (err, result) {
-                if (err) throw err;
+                db.query(`SELECT crystal_id FROM crystals WHERE name = '${crystalName}'`, function (err, result) {
+                    if (err) console.log("error");
 
-                let crystalID = JSON.stringify(result[0].crystal_id);
+                    let crystalID = JSON.stringify(result[0].crystal_id);
 
-                console.log("rID  cID  qty")
-                console.log(recipeID + ", " + crystalID + ", " + quantity)
-            });
+                    console.log("rID  cID  qty")
+                    console.log(recipeID + ", " + crystalID + ", " + quantity)
+                });
+            } catch (error) {
+                console.log("Error in iteration: " + i)
+            }
 
         }
+
 
 
     }

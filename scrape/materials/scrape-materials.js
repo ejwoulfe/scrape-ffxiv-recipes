@@ -1,9 +1,16 @@
 const puppeteer = require('puppeteer');
-let timer = require('../helper/delay');
-let download = require('../helper/download-icon');
-let rows = require('../helper/num-of-rows');
 const fs = require('fs');
+let rows = require('../helper/num-of-rows');
+let download = require('../helper/download-icon');
+let timer = require('../helper/delay');
+let db = require('../../database/connect-to-database');
 
+
+// Connect to the database.
+db.connect(function (err) {
+    if (err) throw err;
+    console.log("Connected!");
+});
 
 (async () => {
     const browser = await puppeteer.launch({ headless: true });
@@ -13,38 +20,45 @@ const fs = require('fs');
         height: 1800
     })
 
+    const URL = 'https://na.finalfantasyxiv.com/lodestone/playguide/db/item/?category2=7&category3=61&page=';
 
-    await page.goto('https://na.finalfantasyxiv.com/lodestone/playguide/db/item/?category2=6&page=1', {
+    let startingPage = 1;
+
+
+    await page.goto(URL + `${startingPage}`, {
         waitUntil: 'domcontentloaded'
     });
-    const totalRecipesQS = '#eorzea_db > div.clearfix > div.db_cnts > div.db-filter__row > div > div > div > span.total';
-    const waitForTotalRecipes = await page.waitForSelector(totalRecipesQS);
-    const totalRecipes = await waitForTotalRecipes.evaluate(total => total.innerText);
+
+    const totalMaterialsQS = '#eorzea_db > div.clearfix > div.db_cnts > div.db-filter__row > div > div > div > span.total';
+    const waitForTotalMaterials = await page.waitForSelector(totalMaterialsQS);
+    const totalMaterials = await waitForTotalMaterials.evaluate(total => total.innerText);
+
+    // Total number of pages will be the total number of materials divided by 50, rounded up.
+    const totalNumOfPages = Math.ceil(totalMaterials / 50);
 
 
-    // Total number of pages will be the total number of recipes divided by 50, rounded up.
-    const totalNumOfPages = Math.ceil(totalRecipes / 50);
-    // Array to hold the material name, icon path, and type.
-    const materialsInfoArr = [];
-    // Array to hold the material icon path string.
-    const materialsIconArr = [];
+    // This will be the last material id in my materials table plus 1 to start inserting.
+    let materialID = 4594;
+
 
     // Scrape the rows on the first page, then start the loop since we need a page.goto before starting the loop.
-    await scrapeRows(materialsInfoArr, materialsIconArr);
+    await scrapeRows();
+
+
+
+
 
     // Loop through the number of pages, gathering all information from each row.
     // Start at page 2 since we are loading into page 1. So k = 2.
-    for (let k = 2; k <= totalNumOfPages; k++) {
-        await page.goto(`https://na.finalfantasyxiv.com/lodestone/playguide/db/item/?category2=6&page=${k}`, {
+    for (let k = startingPage + 1; k <= totalNumOfPages; k++) {
+
+        console.log('-------------' + 'Page ' + k + '----------------');
+        await page.goto(URL + `${k}`, {
             waitUntil: 'domcontentloaded'
         });
-        await scrapeRows(materialsInfoArr, materialsIconArr);
-
+        await scrapeRows();
     }
 
-    // After going through all pages and rows from the website, write to files and close the browser.
-    await writeToFile(materialsInfoArr);
-    await writeURLsToFile(materialsIconArr);
 
     await browser.close();
 
@@ -53,9 +67,8 @@ const fs = require('fs');
 
     // **************************************************** FUNCTIONS *****************************************************************
 
+    async function scrapeRows() {
 
-    // Function that will go through the 50 rows per page(at max), gather all the material information we need and store them into arrays.
-    async function scrapeRows(infoArr, iconsArr) {
 
         let totalRows = await rows.getNumOfRows(page);
 
@@ -63,77 +76,63 @@ const fs = require('fs');
         // Iterate through the number of rows on that page collecting data.
         for (let i = 1; i <= totalRows; i++) {
 
+            materialID += 1;
 
-            // Material Type query selector
-            const materialTypeQS = `#character > tbody > tr:nth-child(${i}) > td.db-table__body--light.latest_patch__major__item > div.db-table__link_txt > span > a`;
-            const waitForType = await page.waitForSelector(materialTypeQS);
-            const materialType = await waitForType.evaluate(craft => craft.innerText);
 
-            // Material name query selector
-            const materialNameQS = `#character > tbody > tr:nth-child(${i}) > td.db-table__body--light.latest_patch__major__item > div.db-table__link_txt > a`;
+            console.log('------------------------------');
+            console.log("Current Row:  " + i);
+            console.log('------------------------------');
+
+
+            // Image query selector
+            let imageQS = `#character > tbody > tr:nth-child(${i}) > td.db-table__body--light.latest_patch__major__item > div.db-list__item__icon > div > img`;
+            const waitForImage = await page.waitForSelector(imageQS);
+            const iconImageURL = await waitForImage.evaluate(img => img.src);
+
+
+
+
+            // Material Name query selector
+            let materialNameQS = `#character > tbody > tr:nth-child(${i}) > td.db-table__body--light.latest_patch__major__item > div.db-table__link_txt > a`;
             const waitForName = await page.waitForSelector(materialNameQS);
-            const materialName = await waitForName.evaluate(craft => craft.innerText);
+            const materialName = await waitForName.evaluate(name => name.innerText);
 
-            // Material Image query selector
-            const materialImageQS = `#character > tbody > tr:nth-child(${i}) > td.db-table__body--light.latest_patch__major__item > div.db-list__item__icon > div > img`;
-            const waitForImage = await page.waitForSelector(materialImageQS);
-            const materialImage = await waitForImage.evaluate(img => img.src);
+            // let materialTypeQS = `#character > tbody > tr:nth-child(${i}) > td.db-table__body--light.latest_patch__major__item > div.db-table__link_txt > span > a`;
+            // const waitForType = await page.waitForSelector(materialTypeQS);
+            // const materialType = await waitForType.evaluate(type => type.innerText);
+            let materialType = 'Miscellany';
 
-            console.log(materialName + ", " + await createImagePath(materialName) + ", " + materialType);
 
-            // Push the image url to the icons array.
-            iconsArr.push(materialImage);
-            await download.downloadIcon(browser, materialImage, '/scrape-ffxiv-recipes/material-icons/', materialName.replace(/\s+/g, '-').toLowerCase());
 
-            // Push the sql formatted material infor to the array.
-            infoArr.push(materialName + ", " + await createImagePath(materialName) + ", " + materialType);
+            await download.downloadIcon(browser, iconImageURL, 'scrape-ffxiv-recipes/icons/materials', materialName.replace(/\s+/g, '-').toLowerCase());
 
-            await timer.delay(250);
+            console.log(materialID);
+            let materialIcon = createImagePath(materialName.replace("'", "\\'"));
+            let materialNameReplaced = materialName.replace("'", "\\'")
+            console.log(materialNameReplaced)
+            console.log(materialIcon);
+            console.log(materialType);
+            console.log('\n');
+
+            // Insert the scrapped materials into the materials table.
+            db.query(`INSERT INTO materials (material_id, name, icon, type) VALUES (${materialID}, '${materialNameReplaced}', '${materialIcon}', '${materialType}')`, function (err, result) {
+                if (err) throw err;
+                console.log("Successfully inserted into db.")
+            });
+
+            await timer.delay(2000);
 
         }
-    }
 
-    // Function that will write the material icon urls to a file.
-    async function writeURLsToFile(iconsArr) {
-
-        fs.writeFile('icon-urls.txt',
-            iconsArr.map((value, index) => {
-                if (index === 0) {
-                    return value;
-                } else {
-                    return "\n" + value;
-                }
-            }),
-            (error) => {
-
-                if (error) throw err;
-            })
 
     }
 
-    // Function that will write the material info to a file.
-    async function writeToFile(materialsArr) {
-
-        fs.writeFile('materials.txt',
-            materialsArr.map((value, index) => {
-                // Use index as an ID key.
-                let materialID = index + 1;
-                if (index === 0) {
-                    return "(" + materialID + ", " + value + ")";
-                } else {
-                    return "\n" + "(" + materialID + ", " + value + ")";
-                }
-            }),
-            (error) => {
-
-                if (error) throw err;
-            })
-    }
 
     // Function that will create a path name for the materials icon to store into the Database.
-    async function createImagePath(materialName) {
+    function createImagePath(materialName) {
 
         return "../../assets/material-icons/" + materialName.replace(/\s+/g, '-').toLowerCase() + ".png";
     }
+
 
 })();
