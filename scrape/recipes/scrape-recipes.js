@@ -3,6 +3,8 @@ const fs = require('fs');
 let rows = require('../helper/num-of-rows');
 let download = require('../helper/download-icon');
 let db = require('../../database/connect-to-database');
+let scrape = require('../helper/scrape-item');
+let timer = require('../helper/delay');
 
 
 // Connect to the database.
@@ -19,9 +21,21 @@ db.connect(function (err) {
         height: 1800
     })
 
-    const URL = 'https://na.finalfantasyxiv.com/lodestone/playguide/db/recipe/?category2=5&page=';
-    let startingPage = 24;
+    // Variables to hold each disciples url so I don't have to keep copy and pasting.
+    const carpenter = 'https://na.finalfantasyxiv.com/lodestone/playguide/db/recipe/?category2=0&page=';
+    const blacksmith = 'https://na.finalfantasyxiv.com/lodestone/playguide/db/recipe/?category2=1&page=';
+    const armorer = 'https://na.finalfantasyxiv.com/lodestone/playguide/db/recipe/?category2=2&page=';
+    const goldsmith = 'https://na.finalfantasyxiv.com/lodestone/playguide/db/recipe/?category2=3&page=';
+    const alchemist = 'https://na.finalfantasyxiv.com/lodestone/playguide/db/recipe/?category2=6&page=';
 
+    // Check Complete
+    const culinarian = 'https://na.finalfantasyxiv.com/lodestone/playguide/db/recipe/?category2=7&page=';
+    const leatherworker = 'https://na.finalfantasyxiv.com/lodestone/playguide/db/recipe/?category2=4&page=';
+    const weaver = 'https://na.finalfantasyxiv.com/lodestone/playguide/db/recipe/?category2=5&page=';
+
+    let startingPage = 2;
+
+    const URL = armorer;
 
     await page.goto(URL + `${startingPage}`, {
         waitUntil: 'domcontentloaded'
@@ -70,12 +84,9 @@ db.connect(function (err) {
         await page.goto(URL + `${k}`, {
             waitUntil: 'domcontentloaded'
         });
-        await scrapeRows(recipesIconArr);
+        await scrapeRows();
     }
 
-    // After going through all pages and rows from the website, write to files and close the browser.
-    await writeToFile(mySQLArray);
-    await writeURLsToFile(recipesIconArr);
 
     await browser.close();
 
@@ -88,10 +99,11 @@ db.connect(function (err) {
 
 
         let totalRows = await rows.getNumOfRows(page);
+        let currentRow = 3;
 
 
         // Iterate through the number of rows on that page collecting data.
-        for (let i = 1; i <= totalRows; i++) {
+        for (let i = currentRow; i <= totalRows; i++) {
 
 
             try {
@@ -168,7 +180,7 @@ db.connect(function (err) {
 
 
                 // await download.downloadIcon(browser, iconImageURL, 'scrape-ffxiv-recipes/icons/culinarian', recipeName.replace(/\s+/g, '-').toLowerCase());
-                console.log(recipeName);
+                console.log(recipeName.replace('', ''));
                 // Gather the recipe required materials
                 await getRecipeMaterials();
                 // Gather the recipe required crystals
@@ -220,14 +232,31 @@ db.connect(function (err) {
                 let formattedMaterialName = materialName.replace("'", "\\'");
 
                 // Get the materials id from the materials table using the material name.
-                db.query(`SELECT material_id FROM materials WHERE name = '${formattedMaterialName}'`, function (err, result) {
+
+                await db.query(`SELECT material_id FROM materials WHERE name = '${formattedMaterialName}'`, async function (err, material) {
+                    if (err) throw error;
+
+                    // If the material is not found within the materials table.
+                    // Scrape the missing materials url and send it to the scrapeItem function.
+                    // The scrapeItem function will then go to that link and scrape the require fields to be entered into the database.
+                    // No longer have to error out and manually enter the url to the file!!!!
+                    if (material[0] === undefined) {
+                        console.log("Found undefined.")
+
+                        let materialURLQS = `#eorzea_db > div.clearfix > div.db_cnts > div > div.recipe_detail.item_detail_box > div.db-view__data > div:nth-child(3) > div > div:nth-child(${i}) > div.db-view__data__reward__item__name.js__trigger_icons > div > a`;
+                        const waitForURL = await page.waitForSelector(materialURLQS);
+                        const materialURL = await waitForURL.evaluate(link => link.href);
+                        await scrape.scrapeItem(materialURL, browser, db);
+
+                    } else {
+                        let materialID = JSON.stringify(material[0].material_id);
+                        console.log("rID  mID  qty")
+                        console.log(recipeID + ", " + materialID + ", " + quantity)
+                    }
 
 
-                    let materialID = JSON.stringify(result[0].material_id);
+                })
 
-                    console.log("rID  mID  qty")
-                    console.log(recipeID + ", " + materialID + ", " + quantity)
-                });
             } catch (error) {
                 console.log("Error in iteration: " + i)
             }

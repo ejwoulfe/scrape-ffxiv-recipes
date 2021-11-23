@@ -18,15 +18,13 @@ db.connect(function (err) {
         height: 1800
     })
 
-    const itemURL = 'https://na.finalfantasyxiv.com/lodestone/playguide/db/item/bc6baa52e6e/';
+    const itemURL = 'https://na.finalfantasyxiv.com/lodestone/playguide/db/item/c01c35db0dd/';
 
 
     await page.goto(itemURL, {
         waitUntil: 'domcontentloaded'
     });
 
-    // This will be the last material id in my materials table plus 1 to start inserting.
-    let materialID = 4594;
 
 
     // Scrape the rows on the first page, then start the loop since we need a page.goto before starting the loop.
@@ -60,21 +58,29 @@ db.connect(function (err) {
 
         await download.downloadIcon(browser, iconImageURL, 'scrape-ffxiv-recipes/icons/materials', materialName.replace(/\s+/g, '-').toLowerCase());
 
-        console.log(materialID);
         let materialIcon = createImagePath(materialName.replace("'", "\\'"));
         let materialNameReplaced = materialName.replace("'", "\\'")
-        console.log(materialNameReplaced)
+        console.log(materialNameReplaced);
         console.log(materialIcon);
-        console.log(materialType);
+        let materialTypeReplaced = materialType.replace("'", "\\'");
+        console.log(materialTypeReplaced);
         console.log('\n');
 
-        // Insert the scrapped materials into the materials table.
-        db.query(`INSERT INTO materials (material_id, name, icon, type) VALUES (${materialID}, '${materialNameReplaced}', '${materialIcon}', '${materialType}')`, function (err, result) {
-            if (err) throw err;
-            console.log("Successfully inserted into db.")
+        // Two queries, one will get the number of rows in the materials table to know what the next material id will be.
+        // Second query will be the one to insert the data into the materials table.
+        db.query('SELECT COUNT(*) as count FROM materials;', (err, result) => {
+            if (err) console.log("error");
+            let materialID = JSON.stringify(result[0].count + 1);
+            db.query(`INSERT INTO materials (material_id, name, icon, type) VALUES (${materialID}, '${materialNameReplaced}', '${materialIcon}', '${materialTypeReplaced}')`, function (err, result) {
+                if (err) throw err;
+                console.log("Successfully inserted into db.")
+                console.log(result);
+
+                return;
+            });
         });
 
-        await timer.delay(2000);
+
 
     }
 

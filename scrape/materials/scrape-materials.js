@@ -20,7 +20,7 @@ db.connect(function (err) {
         height: 1800
     })
 
-    const URL = 'https://na.finalfantasyxiv.com/lodestone/playguide/db/item/?category2=7&category3=61&page=';
+    const URL = 'https://na.finalfantasyxiv.com/lodestone/playguide/db/item/?db_search_category=item&difficulty=&max_craft_lv=&category2=7&q=Ingredient&min_craft_lv=&category3=63&patch=&page=';
 
     let startingPage = 1;
 
@@ -38,7 +38,7 @@ db.connect(function (err) {
 
 
     // This will be the last material id in my materials table plus 1 to start inserting.
-    let materialID = 4594;
+    let materialID = 6677;
 
 
     // Scrape the rows on the first page, then start the loop since we need a page.goto before starting the loop.
@@ -107,8 +107,8 @@ db.connect(function (err) {
             await download.downloadIcon(browser, iconImageURL, 'scrape-ffxiv-recipes/icons/materials', materialName.replace(/\s+/g, '-').toLowerCase());
 
             console.log(materialID);
-            let materialIcon = createImagePath(materialName.replace("'", "\\'"));
-            let materialNameReplaced = materialName.replace("'", "\\'")
+            let materialIcon = createImagePath(materialName.replace("'", "\\'").replace('', ''));
+            let materialNameReplaced = materialName.replace("'", "\\'").replace('', '');
             console.log(materialNameReplaced)
             console.log(materialIcon);
             console.log(materialType);
