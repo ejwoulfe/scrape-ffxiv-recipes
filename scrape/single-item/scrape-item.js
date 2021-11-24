@@ -18,7 +18,7 @@ db.connect(function (err) {
         height: 1800
     })
 
-    const itemURL = 'https://na.finalfantasyxiv.com/lodestone/playguide/db/item/c01c35db0dd/';
+    const itemURL = 'https://na.finalfantasyxiv.com/lodestone/playguide/db/item/51162b17a9b/?patch=';
 
 
     await page.goto(itemURL, {
@@ -68,17 +68,17 @@ db.connect(function (err) {
 
         // Two queries, one will get the number of rows in the materials table to know what the next material id will be.
         // Second query will be the one to insert the data into the materials table.
-        db.query('SELECT COUNT(*) as count FROM materials;', (err, result) => {
-            if (err) console.log("error");
-            let materialID = JSON.stringify(result[0].count + 1);
-            db.query(`INSERT INTO materials (material_id, name, icon, type) VALUES (${materialID}, '${materialNameReplaced}', '${materialIcon}', '${materialTypeReplaced}')`, function (err, result) {
-                if (err) throw err;
-                console.log("Successfully inserted into db.")
-                console.log(result);
+        // db.query('SELECT COUNT(*) as count FROM materials;', (err, result) => {
+        //     if (err) console.log("error");
+        //     let materialID = JSON.stringify(result[0].count + 1);
+        //     db.query(`INSERT INTO materials (material_id, name, icon, type) VALUES (${materialID}, '${materialNameReplaced}', '${materialIcon}', '${materialTypeReplaced}')`, function (err, result) {
+        //         if (err) throw err;
+        //         console.log("Successfully inserted into db.")
+        //         console.log(result);
 
-                return;
-            });
-        });
+        //         return;
+        //     });
+        // });
 
 
 

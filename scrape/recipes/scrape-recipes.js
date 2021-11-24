@@ -22,20 +22,18 @@ db.connect(function (err) {
     })
 
     // Variables to hold each disciples url so I don't have to keep copy and pasting.
-    const carpenter = 'https://na.finalfantasyxiv.com/lodestone/playguide/db/recipe/?category2=0&page=';
     const blacksmith = 'https://na.finalfantasyxiv.com/lodestone/playguide/db/recipe/?category2=1&page=';
-    const armorer = 'https://na.finalfantasyxiv.com/lodestone/playguide/db/recipe/?category2=2&page=';
-    const goldsmith = 'https://na.finalfantasyxiv.com/lodestone/playguide/db/recipe/?category2=3&page=';
-    const alchemist = 'https://na.finalfantasyxiv.com/lodestone/playguide/db/recipe/?category2=6&page=';
-
-    // Check Complete
     const culinarian = 'https://na.finalfantasyxiv.com/lodestone/playguide/db/recipe/?category2=7&page=';
     const leatherworker = 'https://na.finalfantasyxiv.com/lodestone/playguide/db/recipe/?category2=4&page=';
     const weaver = 'https://na.finalfantasyxiv.com/lodestone/playguide/db/recipe/?category2=5&page=';
+    const armorer = 'https://na.finalfantasyxiv.com/lodestone/playguide/db/recipe/?category2=2&page=';
+    const carpenter = 'https://na.finalfantasyxiv.com/lodestone/playguide/db/recipe/?category2=0&page=';
+    const alchemist = 'https://na.finalfantasyxiv.com/lodestone/playguide/db/recipe/?category2=6&page=';
+    const goldsmith = 'https://na.finalfantasyxiv.com/lodestone/playguide/db/recipe/?category2=3&page=';
 
-    let startingPage = 2;
+    let startingPage = 1;
 
-    const URL = armorer;
+    const URL = blacksmith;
 
     await page.goto(URL + `${startingPage}`, {
         waitUntil: 'domcontentloaded'
@@ -92,14 +90,13 @@ db.connect(function (err) {
 
 
 
-
     // **************************************************** FUNCTIONS *****************************************************************
 
     async function scrapeRows() {
 
 
         let totalRows = await rows.getNumOfRows(page);
-        let currentRow = 3;
+        let currentRow = 1;
 
 
         // Iterate through the number of rows on that page collecting data.
@@ -260,8 +257,6 @@ db.connect(function (err) {
             } catch (error) {
                 console.log("Error in iteration: " + i)
             }
-
-            // Insert the recipe id, material id, and material quantity into the materials list table.
 
 
         }

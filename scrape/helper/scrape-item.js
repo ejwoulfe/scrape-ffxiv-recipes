@@ -47,9 +47,10 @@ module.exports = {
 
         function createImagePath(recipeName) {
 
-            return "../../assets/recipe-icons/" + recipeName.replace(/\s+/g, '-').toLowerCase() + ".png";
+            return "../../assets/material-icons/" + recipeName.replace(/\s+/g, '-').toLowerCase() + ".png";
         }
 
+        await page2.close();
 
     }
 
