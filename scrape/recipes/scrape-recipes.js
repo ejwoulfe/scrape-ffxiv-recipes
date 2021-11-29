@@ -31,9 +31,15 @@ db.connect(function (err) {
     const alchemist = 'https://na.finalfantasyxiv.com/lodestone/playguide/db/recipe/?category2=6&page=';
     const goldsmith = 'https://na.finalfantasyxiv.com/lodestone/playguide/db/recipe/?category2=3&page=';
 
-    let startingPage = 1;
 
-    const URL = blacksmith;
+    // Change each seperate disciple
+    const URL = weaver;
+    const discipleID = 8;
+    const disciple = "weaver";
+
+
+
+    let startingPage = 1;
 
     await page.goto(URL + `${startingPage}`, {
         waitUntil: 'domcontentloaded'
@@ -46,32 +52,8 @@ db.connect(function (err) {
     // Total number of pages will be the total number of recipes divided by 50, rounded up.
     const totalNumOfPages = Math.ceil(totalRecipes / 50);
 
-    // Array to hold the material icon path string.
-    const recipesIconArr = [];
-
-    // Variable that will be collect all recipe data and format it into mysql insertion string.
-    let mysqlString = "";
-
-    // Array that will hold all the sql formatted recipes.
-    const mySQLArray = [];
-
-    let mySQLObject = {
-        id: null,
-        level: null,
-        itemLevel: null,
-        type: null,
-        icon: null,
-        name: null,
-        totalCrafted: null,
-        link: null
-    };
-
-    let recipeID = 0;
     // Scrape the rows on the first page, then start the loop since we need a page.goto before starting the loop.
-    await scrapeRows(recipesIconArr);
-
-
-
+    await scrapeRows();
 
 
     // Loop through the number of pages, gathering all information from each row.
@@ -103,14 +85,28 @@ db.connect(function (err) {
         for (let i = currentRow; i <= totalRows; i++) {
 
 
+
             try {
 
+                let mySQLObject = {
+                    disciple_id: discipleID,
+                    recipe_id: null,
+                    level: null,
+                    itemLevel: null,
+                    type: null,
+                    icon: null,
+                    name: null,
+                    totalCrafted: null,
+                    link: null
+                };
 
-                recipeID += 1;
 
-                mySQLObject.id = recipeID;
+
+                // recipeID += 1;
+
+                // mySQLObject.recipe_id = recipeID;
                 console.log('------------------------------');
-                console.log("Current Row:  " + recipeID);
+                console.log("Current Row:  " + i);
                 console.log('------------------------------');
 
 
@@ -122,8 +118,15 @@ db.connect(function (err) {
                 const waitForItemLevel = await page.waitForSelector(recipeItemLevelQS);
                 const itemLevel = await waitForItemLevel.evaluate(ilevel => ilevel.innerText);
 
+                if (itemLevel === '-') {
+                    mySQLObject.itemLevel = null;
+                } else {
+                    mySQLObject.itemLevel = itemLevel;
+
+                }
+
                 mySQLObject.level = recipeLevel;
-                mySQLObject.itemLevel = itemLevel;
+
 
 
                 let recipeTypeQS = `#character > tbody > tr:nth-child(${i}) > td.db-table__body--light.latest_patch__major__item > div.db-table__link_txt > span:nth-child(3)`
@@ -134,7 +137,7 @@ db.connect(function (err) {
 
                     const waitForRecipeType = await page.waitForSelector(recipeTypeQS);
                     const recipeType = await waitForRecipeType.evaluate(type => type.innerText);
-                    mySQLObject.recipeType = recipeType;
+                    mySQLObject.type = recipeType;
 
                 }
 
@@ -161,11 +164,45 @@ db.connect(function (err) {
                 let recipeNameQS = '#eorzea_db > div.clearfix > div.db_cnts > div > div.recipe_detail.item_detail_box > div.db-view__item__header.clearfix > div.db-view__item__text > h2';
                 const waitForName = await page.waitForSelector(recipeNameQS);
                 const recipeName = await waitForName.evaluate(name => name.innerText);
+                let formattedRecipeName = recipeName.replace('', '').replace("'", "\\'");
 
 
-                mySQLObject.icon = createImagePath(recipeName);
 
-                mySQLObject.name = recipeName;
+
+
+                let queryObject = new Promise(function (resolve, reject) {
+                    db.query(`SELECT recipe_id FROM recipes WHERE name = '${formattedRecipeName}' AND disciple_id = ${discipleID}`, function (err, data) {
+                        if (err) {
+                            reject(new Error("Error: " + err))
+                        } else {
+                            resolve(data[0].recipe_id);
+                        }
+                    })
+                });
+
+                await queryObject.then(async recipeID => {
+
+                    // Gather the recipe required materials
+                    await getRecipeMaterials(recipeID);
+                    // Gather the recipe required crystals
+                    await getRecipeCrystals(recipeID);
+
+                });
+
+
+
+
+
+
+
+
+
+
+
+
+                mySQLObject.icon = createImagePath(recipeName.replace('', '').replace("'", "\\'"));
+
+                mySQLObject.name = recipeName.replace('', '').replace("'", "\\'");
 
 
 
@@ -176,24 +213,24 @@ db.connect(function (err) {
                 mySQLObject.totalCrafted = totalCrafted;
 
 
-                // await download.downloadIcon(browser, iconImageURL, 'scrape-ffxiv-recipes/icons/culinarian', recipeName.replace(/\s+/g, '-').toLowerCase());
-                console.log(recipeName.replace('', ''));
-                // Gather the recipe required materials
-                await getRecipeMaterials();
-                // Gather the recipe required crystals
-                await getRecipeCrystals();
+                // await download.downloadIcon(browser, iconImageURL, `scrape-ffxiv-recipes/icons/blacksmith`, recipeName.replace(/\s+/g, '-').replace('', '').toLowerCase());
+
 
                 // console.log(formattedSQL);
                 //console.log(mySQLObject)
 
+                // await db.query(`INSERT INTO recipes (disciple_id, recipe_id, level, item_level, type, icon, name, total_crafted, link) VALUES (${mySQLObject.disciple_id}, ${mySQLObject.recipe_id}, ${mySQLObject.level}, ${mySQLObject.itemLevel}, '${mySQLObject.type}', '${mySQLObject.icon}', '${mySQLObject.name}', ${mySQLObject.totalCrafted}, '${mySQLObject.link}'  )`, function (err, result) {
+                //     if (err) throw err;
 
+                //     console.log(result);
 
-
+                // });
 
                 // Once done gathering all the necessary data, go back to the list page.
                 await page.goBack();
             } catch (error) {
                 console.log("Error in iteration: " + i)
+                console.log(error)
             }
 
         }
@@ -204,7 +241,7 @@ db.connect(function (err) {
 
 
     // Function that will gather the materials required to craft the recipe.
-    async function getRecipeMaterials() {
+    async function getRecipeMaterials(recipeID) {
 
         // Crafting materials query selector
         const materialsQS = '#eorzea_db > div.clearfix > div.db_cnts > div > div.recipe_detail.item_detail_box > div.db-view__data > div:nth-child(3) > div > div.js__material';
@@ -226,7 +263,9 @@ db.connect(function (err) {
                 const waitForNames = await page.waitForSelector(marterialNameQS);
                 const materialName = await waitForNames.evaluate(name => name.innerText);
 
-                let formattedMaterialName = materialName.replace("'", "\\'");
+                let formattedMaterialName = materialName.replace("'", "\\'").replace('', '');
+
+
 
                 // Get the materials id from the materials table using the material name.
 
@@ -246,16 +285,29 @@ db.connect(function (err) {
                         await scrape.scrapeItem(materialURL, browser, db);
 
                     } else {
-                        let materialID = JSON.stringify(material[0].material_id);
+                        let materialID = material[0].material_id;
                         console.log("rID  mID  qty")
                         console.log(recipeID + ", " + materialID + ", " + quantity)
+
+                        // With the recipeID create the relationship table with the materialID.
+                        db.query(`INSERT INTO materials_list VALUES (${recipeID}, ${materialID}, ${quantity})`, function (err, result) {
+                            if (err) throw err;
+
+                            console.log(result);
+
+                        });
+
+
+
                     }
 
 
                 })
 
             } catch (error) {
-                console.log("Error in iteration: " + i)
+                console.log("Error in iteration: " + i);
+                console.log(error);
+
             }
 
 
@@ -266,7 +318,7 @@ db.connect(function (err) {
     }
 
     // Function that will gather the crystals required to craft the recipe.
-    async function getRecipeCrystals() {
+    async function getRecipeCrystals(recipeID) {
 
         // Crafting Crystals query selector
         const crystalsQS = '#eorzea_db > div.clearfix > div.db_cnts > div > div.recipe_detail.item_detail_box > div.db-view__data > div:nth-child(4) > div > div ';
@@ -288,13 +340,24 @@ db.connect(function (err) {
                 db.query(`SELECT crystal_id FROM crystals WHERE name = '${crystalName}'`, function (err, result) {
                     if (err) console.log("error");
 
-                    let crystalID = JSON.stringify(result[0].crystal_id);
+                    let crystalID = result[0].crystal_id;
+
+
 
                     console.log("rID  cID  qty")
                     console.log(recipeID + ", " + crystalID + ", " + quantity)
+
+
+                    db.query(`INSERT INTO crystals_list VALUES (${recipeID}, ${crystalID}, ${quantity})`, function (err, result) {
+                        if (err) throw err;
+
+                        console.log(result);
+
+                    });
                 });
             } catch (error) {
                 console.log("Error in iteration: " + i)
+                console.log(error);
             }
 
         }
@@ -308,47 +371,9 @@ db.connect(function (err) {
     // Function that will create a path name for the materials icon to store into the Database.
     function createImagePath(recipeName) {
 
-        return "../../assets/recipe-icons/" + recipeName.replace(/\s+/g, '-').toLowerCase() + ".png";
+        return `../../assets/recipe-icons/${disciple}/` + recipeName.replace(/\s+/g, '-').replace('', '').toLowerCase() + ".png";
     }
 
-
-
-    // Function that will write the material info to a file.
-    async function writeToFile(sqlArray) {
-
-        fs.writeFile('recipes.txt', sqlArray.map((value, index) => {
-            // Use index as an ID key.
-            let recipeID = index + 1;
-            if (index === 0) {
-                return "(" + recipeID + ", " + value + ")";
-            } else {
-                return "\n" + "(" + recipeID + ", " + value + ")";
-            }
-        }),
-            (error) => {
-
-                if (error) throw err;
-
-            })
-    }
-
-    // Function that will write the material icon urls to a file.
-    async function writeURLsToFile(iconsArr) {
-
-        fs.writeFile('icon-urls.txt',
-            iconsArr.map((value, index) => {
-                if (index === 0) {
-                    return value;
-                } else {
-                    return "\n" + value;
-                }
-            }),
-            (error) => {
-
-                if (error) throw err;
-            })
-
-    }
 
 
 })();
